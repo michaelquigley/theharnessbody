@@ -1,0 +1,12 @@
+.gradle
+.idea
+.vscode
+.pv
+.store
+.claude
+.codex
+.mercurius
+*.db
+CODEX-*.md
+node_modules
+ui/flo/dist
