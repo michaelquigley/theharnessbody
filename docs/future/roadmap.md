@@ -9,10 +9,10 @@ The arc:
 3. **terminus** (working name for the "new otis") — the first tool built *on* the body, composed from these parts. Brings its own findings schema (already shaped here) and its body-of-knowledge handling as a tool-side extension.
 4. **Refactor mercurius and sexton** onto the body — last. mercurius is the correctness check throughout (its verdict schema must keep validating unchanged through the body's helper); it is not refactored until the end.
 
-This deliberately diverges from `harvest-map.md`, which used an early mercurius/sexton refactor as the extraction forcing-function. Here terminus is the first consumer and the donor refactor is deferred.
+This deliberately makes terminus the first consumer rather than refactoring mercurius/sexton early as an extraction forcing-function; the donor refactor is deferred to the end.
 
 ## Open design decisions (carried forward)
 
-- **BoK: core, flavor, or tool-side?** The harvest map's boundary rule is "the body is what the three tools duplicate." A body-of-knowledge is used by exactly one tool, and `otis-bok` is already its own repo — so the current lean is that BoK stays tool-side, a `terminus` extension, not a body package. Decide before building the prompt subsystem.
+- **BoK: core, flavor, or tool-side?** The working boundary rule is "the body is what the three tools duplicate." A body-of-knowledge is used by exactly one tool, and `otis-bok` is already its own repo — so the current lean is that BoK stays tool-side, a `terminus` extension, not a body package. Decide before building the prompt subsystem.
 - **One shared output envelope, or two domain schemas?** Settled for now as two (verdict, findings), with the body schema-agnostic. Worth revisiting whether a minimal shared finding envelope is worth standardizing so the notification/record layers can render any tool's output generically.
 - **Prompt: assembly primitives vs. one parameterized builder?** Leaning primitives, each tool composing its own prompt — decide when `prompt/` is harvested.
