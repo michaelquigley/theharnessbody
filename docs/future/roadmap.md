@@ -5,9 +5,11 @@ Intent, not built state. The body grows by harvesting proven parts from the cons
 The arc:
 
 1. **Reviewer subsystem** — codex, claude, pi, dummy, schema-agnostic validation, the envelope guard. *Built* (see `../current/`).
-2. **Remaining subsystems** — harvest the collection `terminus` needs: `repo/` (bare mirror + ephemeral worktree, from otis), `scope/` (scope kinds + byte budgeting, from otis), `prompt/` (assembly primitives), `mattermost/` (REST + WS + dispatch, from sexton, plus otis's message-size cap), `command/` (transport-agnostic dispatch, from sexton), `config/`, `record/` (round log + atomic writes, from mercurius), `errs/`, `cli/`.
-3. **terminus** (working name for the "new otis") — the first tool built *on* the body, composed from these parts. Brings its own findings schema (already shaped here) and its body-of-knowledge handling as a tool-side extension.
-4. **Refactor mercurius and sexton** onto the body — last. mercurius is the correctness check throughout (its verdict schema must keep validating unchanged through the body's helper); it is not refactored until the end.
+2. **Mattermost + command** — a `mattermost.Client` (REST + WebSocket + @mention/trigger command extraction + allowed-users) and a transport-agnostic `command.Registry`, from sexton. *Built*. (otis's message-size truncation deferred per YAGNI until terminus posts large findings.)
+3. **Git (`repo/`)** — path-based mirror + fetch + resolve + ephemeral worktree (from otis, read-only checkout) and a `Repo` working-tree handle for status/stage/commit/pull/push (from sexton). *Built*.
+4. **Remaining subsystems** — harvest the collection `terminus` needs: `scope/` (scope kinds + byte budgeting, from otis), `prompt/` (assembly primitives), `config/`, `record/` (round log + atomic writes, from mercurius), `errs/`, `cli/`.
+5. **terminus** (working name for the "new otis") — the first tool built *on* the body, composed from these parts. Brings its own findings schema (already shaped here) and its body-of-knowledge handling as a tool-side extension.
+6. **Refactor mercurius and sexton** onto the body — last. mercurius is the correctness check throughout (its verdict schema must keep validating unchanged through the body's helper); it is not refactored until the end.
 
 This deliberately makes terminus the first consumer rather than refactoring mercurius/sexton early as an extraction forcing-function; the donor refactor is deferred to the end.
 

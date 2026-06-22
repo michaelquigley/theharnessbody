@@ -4,7 +4,7 @@ A Go library: the reusable substrate that review harnesses are built on. This
 file describes what exists, verifiable against the code. Forward-looking intent
 lives in `../future/`.
 
-Today the body carries one subsystem.
+Today the body carries three subsystems.
 
 ## Reviewer subsystem (`reviewer/`)
 
@@ -34,3 +34,41 @@ A backend-agnostic reviewer interface and the output-schema tooling around it.
 
 The reviewer-output contract — the codex envelope, the findings shape, and the
 guard that enforces it — is in `reviewer-output-contract.md`.
+
+## Mattermost + command (`mattermost/`, `command/`)
+
+Chat ingress/egress and a transport-agnostic command dispatcher, lifted and
+generalized from sexton.
+
+- **`command`** — a `Registry` of named commands (`Register(name, summary,
+  Handler)`), with `Dispatch(ctx, text) string` (help on empty/`help`, the
+  handler's reply or a rendered error, or an unknown-command message) and
+  `Help()`. Transport-agnostic: the same registry serves a chat bot and a CLI.
+- **`mattermost`** — a `Client` that posts via REST (`PostMessage`) and listens
+  over WebSocket (with reconnect), resolving the bot identity, extracting commands
+  from @mentions or configured trigger words, and filtering by allowed users. On a
+  matched message it calls a `Responder func(ctx, command) string` and posts a
+  non-empty reply to the originating channel. `Registry.Dispatch` satisfies
+  `Responder`, so wiring is one line: `mc.Start(reg.Dispatch)`.
+- **`mattermost` (integration)** — build-tagged live smoke tests
+  (`TestConfirmPostMessage`, `TestConfirmConnect`), gated on `THB_MM_*` env.
+
+`mattermost` doesn't import `command` and vice versa; the app wires them.
+
+## Git (`repo/`)
+
+Thin `git`-CLI wrappers in two shapes, lifted from otis and sexton.
+
+- **Read-only checkout (free functions, from otis)** — `EnsureMirror` (bare
+  `--mirror` clone, origin-verified), `FetchBranch` (explicit refspec so the ref
+  never goes stale), `ResolveBranchSHA`, and
+  `CreateWorktree`/`RemoveWorktree`/`PruneWorktrees`/`CaptureHEAD` for an ephemeral
+  detached checkout. This is how a reviewer gets a branch's code onto disk without
+  touching any working copy. The package is unopinionated about paths — the caller
+  says where mirrors and scratch worktrees live.
+- **Working tree (a `Repo` handle, from sexton)** — `New(dir, sshKey)` then
+  `Status`/`IsDirty`/`Branch`/`HEAD`/`ShortHEAD`/`CommitTime`/`Diff*` and the write
+  ops `StageAll`/`Commit`/`Pull` (`--rebase`)/`Push`/`RebaseAbort`, with sentinel
+  errors (`ErrNothingToCommit`, `ErrConflict`, `ErrNoRemote`, …).
+- Shared: one SSH-command builder (`-o IdentitiesOnly=yes -o
+  StrictHostKeyChecking=accept-new`, shell-quoted key).
