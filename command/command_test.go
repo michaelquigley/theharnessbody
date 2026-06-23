@@ -73,6 +73,26 @@ func TestDispatchCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestRegisterRejectsBadRegistrations(t *testing.T) {
+	ok := func(ctx context.Context, args []string) (string, error) { return "ok", nil }
+	cases := map[string]func(){
+		"blank name":      func() { New().Register("", "s", ok) },
+		"whitespace name": func() { New().Register("   ", "s", ok) },
+		"reserved help":   func() { New().Register("Help", "s", ok) },
+		"nil handler":     func() { New().Register("x", "s", nil) },
+	}
+	for name, fn := range cases {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatalf("expected Register to panic for %s", name)
+				}
+			}()
+			fn()
+		})
+	}
+}
+
 func TestDispatchPropagatesContext(t *testing.T) {
 	r := New()
 	type ctxKey string

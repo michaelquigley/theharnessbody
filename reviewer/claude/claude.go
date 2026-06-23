@@ -47,6 +47,11 @@ func New(options Options) *Reviewer {
 // '--json-schema'. The validated object is returned in the envelope's
 // 'structured_output' field; when that is absent the object is recovered from the
 // 'result' text. The caller validates the returned object against the schema.
+//
+// claude auto-loads CLAUDE.md from its working-directory hierarchy, so WorkingDir
+// must be a clean directory rather than the reviewed checkout — otherwise the
+// reviewed code's CLAUDE.md becomes trusted reviewer context. See
+// reviewer.ReviewRequest.WorkingDir.
 func (r *Reviewer) Review(ctx context.Context, req reviewer.ReviewRequest) (reviewer.ReviewResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return reviewer.ReviewResponse{}, err

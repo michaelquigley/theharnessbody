@@ -101,7 +101,7 @@ func (r *Reviewer) run(ctx context.Context, workingDir string, prompt string, sc
 	cmd := exec.CommandContext(ctx, r.options.BinaryPath, args...)
 	cmd.Stdin = strings.NewReader(prompt)
 
-	codexHome, cleanup, err := r.prepareCodexHome(workingDir)
+	codexHome, cleanup, err := r.prepareCodexHome()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,13 +120,17 @@ func (r *Reviewer) run(ctx context.Context, workingDir string, prompt string, sc
 	return stdout.Bytes(), stderr.Bytes(), nil
 }
 
-func (r *Reviewer) prepareCodexHome(workingDir string) (string, func(), error) {
+func (r *Reviewer) prepareCodexHome() (string, func(), error) {
 	originalHome, err := codexHome()
 	if err != nil {
 		return "", func() {}, err
 	}
 
-	dir, err := os.MkdirTemp(workingDir, ".codex-home-*")
+	// The ephemeral CODEX_HOME is created in the system temp dir, NOT inside the
+	// review WorkingDir: WorkingDir is the code under review, and this directory
+	// holds a symlink to live auth.json — credentials must never land inside the
+	// tree the reviewer is reading (or get written into a sandboxed worktree).
+	dir, err := os.MkdirTemp("", "theharnessbody-codex-home-*")
 	if err != nil {
 		return "", func() {}, fmt.Errorf("create codex home: %w", err)
 	}

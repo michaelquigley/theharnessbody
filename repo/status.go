@@ -26,7 +26,11 @@ func (s *Status) ChangeCount() int {
 	return len(s.Modified) + len(s.Added) + len(s.Deleted) + len(s.Untracked)
 }
 
-var branchRegex = regexp.MustCompile(`^## ([^.\s]+)(?:\.\.\.(\S+))?(?: \[(.+)\])?$`)
+// The branch capture is non-greedy so it stops at the `...` tracking separator
+// rather than at the first dot, which keeps ahead/behind data for dotted branch
+// names like release/v1.2. (git refnames cannot contain `...`, so the separator
+// is unambiguous.)
+var branchRegex = regexp.MustCompile(`^## (.+?)(?:\.\.\.(\S+))?(?: \[(.+)\])?$`)
 var aheadBehindRegex = regexp.MustCompile(`(ahead|behind) (\d+)`)
 
 func parseStatus(output string) *Status {

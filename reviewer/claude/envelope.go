@@ -56,17 +56,23 @@ func parseEnvelope(stdout []byte) (json.RawMessage, envelope, error) {
 		return nil, env, fmt.Errorf("claude reviewer error: %s", msg)
 	}
 
-	// prefer the schema-validated structured output. passing it through jsonout.Object
-	// guards against it being a json string or array rather than an object.
-	if len(bytes.TrimSpace(env.StructuredOutput)) > 0 {
-		if raw, err := jsonout.Object(env.StructuredOutput); err == nil {
-			return raw, env, nil
+	// structured_output is the native schema-enforced field; when present and
+	// non-null it is authoritative. If we can't extract a json object from it, fail
+	// rather than silently falling back to the freeform result text, which could be
+	// a different or wrong object. Fall back to result only when structured_output
+	// is absent or null. (jsonout.Object also guards against it being a json string
+	// or array rather than an object.)
+	if so := bytes.TrimSpace(env.StructuredOutput); len(so) > 0 && !bytes.Equal(so, []byte("null")) {
+		raw, err := jsonout.Object(so)
+		if err != nil {
+			return nil, env, fmt.Errorf("claude reviewer structured_output is present but not a json object: %w", err)
 		}
+		return raw, env, nil
 	}
 
 	raw, err := jsonout.Object([]byte(env.Result))
 	if err != nil {
-		return nil, env, fmt.Errorf("claude reviewer returned no json object in structured_output or result: %w", err)
+		return nil, env, fmt.Errorf("claude reviewer returned no json object in result: %w", err)
 	}
 	return raw, env, nil
 }

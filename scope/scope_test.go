@@ -235,3 +235,88 @@ func TestBuildContentRecentInlinesDiffs(t *testing.T) {
 		t.Fatalf("diff should show the added line, got:\n%s", in.Content)
 	}
 }
+
+func TestResolvePathsRejectsEscape(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "a.txt", "a")
+	git(t, dir, baseEnv(), "add", "-A")
+	git(t, dir, baseEnv(), "commit", "-m", "init")
+
+	for _, bad := range []string{"../escape", "/etc/passwd", "sub/../../up"} {
+		if _, err := Resolve(context.Background(), dir, Spec{Type: KindPaths, Paths: []string{bad}}, time.Time{}); err == nil {
+			t.Fatalf("expected %q to be rejected as outside the worktree", bad)
+		}
+	}
+}
+
+func TestResolvePathsTrackedOnly(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "tracked.txt", "t")
+	git(t, dir, baseEnv(), "add", "-A")
+	git(t, dir, baseEnv(), "commit", "-m", "init")
+	writeFile(t, dir, "untracked.txt", "u") // never added
+
+	// a glob silently skips the untracked match
+	r, err := Resolve(context.Background(), dir, Spec{Type: KindPaths, Paths: []string{"*.txt"}}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equal(r.Files, []string{"tracked.txt"}) {
+		t.Fatalf("glob should skip untracked file: %v", r.Files)
+	}
+
+	// an explicitly named untracked file is an error
+	if _, err := Resolve(context.Background(), dir, Spec{Type: KindPaths, Paths: []string{"untracked.txt"}}, time.Time{}); err == nil || !strings.Contains(err.Error(), "not a tracked file") {
+		t.Fatalf("expected untracked-file error, got %v", err)
+	}
+}
+
+func TestResolveRecentEmptyWindow(t *testing.T) {
+	dir := initRepo(t)
+	now := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	writeFile(t, dir, "old.txt", "old")
+	git(t, dir, baseEnv(), "add", "-A")
+	git(t, dir, datedEnv("2026-06-01T12:00:00Z"), "commit", "-m", "old")
+
+	r, err := Resolve(context.Background(), dir, Spec{Type: KindRecent, Window: 24 * time.Hour}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Files) != 0 || r.BaseSHA != "" {
+		t.Fatalf("expected empty recent scope, got %+v", r)
+	}
+	c, err := BuildContent(context.Background(), dir, r, Options{})
+	if err != nil {
+		t.Fatalf("empty recent scope must not error: %v", err)
+	}
+	if len(c.Files) != 0 || len(c.Inline) != 0 {
+		t.Fatalf("expected empty content, got %+v", c)
+	}
+}
+
+func TestBuildContentRecentBudgeted(t *testing.T) {
+	dir := initRepo(t)
+	now := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	writeFile(t, dir, "f.txt", "seed\n")
+	git(t, dir, baseEnv(), "add", "-A")
+	git(t, dir, datedEnv("2026-06-17T12:00:00Z"), "commit", "-m", "old")
+
+	writeFile(t, dir, "f.txt", strings.Repeat("changed line\n", 100))
+	git(t, dir, baseEnv(), "add", "-A")
+	git(t, dir, datedEnv("2026-06-20T11:00:00Z"), "commit", "-m", "new")
+
+	r, err := Resolve(context.Background(), dir, Spec{Type: KindRecent, Window: 24 * time.Hour}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := BuildContent(context.Background(), dir, r, Options{PerFileBytes: 40, TotalScopeBytes: 40})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mf := findManifest(t, c, "f.txt"); mf.Truncated == "" {
+		t.Fatal("expected the recent diff to be budget-truncated")
+	}
+	if got := findInline(t, c, "f.txt"); len(got.Content) > 40 {
+		t.Fatalf("recent diff not budgeted: %d bytes inlined", len(got.Content))
+	}
+}

@@ -23,15 +23,16 @@ type Repo struct {
 	sshCommand string
 }
 
-// New returns a Repo for the working directory at root, or nil if root is not a
-// git repository. When sshKey is non-empty it is used as the git transport key.
-func New(root, sshKey string) *Repo {
+// New returns a Repo for the working directory at root, or ErrNotARepo if root is
+// not a git repository. When sshKey is non-empty it is used as the git transport
+// key.
+func New(root, sshKey string) (*Repo, error) {
 	g := &Repo{root: root}
 	if !g.IsRepo() {
-		return nil
+		return nil, ErrNotARepo
 	}
 	g.sshCommand = buildSSHCommand(sshKey)
-	return g
+	return g, nil
 }
 
 func (g *Repo) IsRepo() bool {

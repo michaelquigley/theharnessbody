@@ -33,6 +33,23 @@ func TestParseStatus(t *testing.T) {
 	}
 }
 
+func TestParseStatusDottedBranch(t *testing.T) {
+	s := parseStatus("## release/v1.2...origin/release/v1.2 [ahead 3, behind 4]\n M f.go\n")
+	if s.Branch != "release/v1.2" {
+		t.Errorf("branch = %q, want release/v1.2", s.Branch)
+	}
+	if s.Ahead != 3 || s.Behind != 4 {
+		t.Errorf("ahead/behind = %d/%d, want 3/4 (lost for a dotted branch?)", s.Ahead, s.Behind)
+	}
+}
+
+func TestParseStatusDottedBranchNoRemote(t *testing.T) {
+	s := parseStatus("## release/v1.2\n")
+	if s.Branch != "release/v1.2" {
+		t.Errorf("branch = %q, want release/v1.2", s.Branch)
+	}
+}
+
 func TestParseStatusClean(t *testing.T) {
 	s := parseStatus("## main...origin/main\n")
 	if s.Branch != "main" {

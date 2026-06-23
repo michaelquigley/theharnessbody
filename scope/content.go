@@ -13,7 +13,8 @@ const (
 )
 
 // Options bounds how much content BuildContent inlines. Zero values fall back to
-// 8 KiB per file and 256 KiB total.
+// 8 KiB per file and 256 KiB total. The caps apply to file content and diffs
+// alike.
 type Options struct {
 	PerFileBytes    int
 	TotalScopeBytes int
@@ -45,8 +46,9 @@ type InlineContent struct {
 }
 
 // BuildContent turns a Resolved file set into manifest-plus-inline prompt content,
-// bounded by opts. For full/paths scope it inlines (truncated) file content; for
-// recent scope it inlines per-file diffs against Resolved.BaseSHA.
+// bounded by opts. For full/paths scope it inlines budgeted file content; for
+// recent scope it inlines budgeted per-file diffs against Resolved.BaseSHA. An
+// empty recent scope (no changes in the window) yields empty content, not an error.
 func BuildContent(ctx context.Context, worktree string, resolved Resolved, opts Options) (Content, error) {
 	if opts.PerFileBytes <= 0 {
 		opts.PerFileBytes = defaultPerFileBytes
@@ -59,31 +61,69 @@ func BuildContent(ctx context.Context, worktree string, resolved Resolved, opts 
 		return Content{}, err
 	}
 	content := Content{Kind: resolved.Kind, GitHead: head}
+
 	switch resolved.Kind {
 	case KindFull, KindPaths:
-		return buildFileInlineContent(content, resolved.Files, worktree, opts)
+		items, err := fileItems(resolved.Files, worktree)
+		if err != nil {
+			return Content{}, err
+		}
+		return budgetedInline(content, items, opts), nil
 	case KindRecent:
+		if len(resolved.Files) == 0 {
+			return content, nil
+		}
 		if resolved.BaseSHA == "" {
 			return Content{}, fmt.Errorf("base sha is required for recent scope content")
 		}
-		return buildRecentDiffContent(ctx, content, resolved.Files, resolved.BaseSHA, worktree)
+		items, err := diffItems(ctx, resolved.Files, resolved.BaseSHA, worktree)
+		if err != nil {
+			return Content{}, err
+		}
+		return budgetedInline(content, items, opts), nil
 	default:
 		return Content{}, fmt.Errorf("unknown scope kind %q", resolved.Kind)
 	}
 }
 
-func buildFileInlineContent(content Content, files []string, worktree string, opts Options) (Content, error) {
-	total := 0
+type inlineItem struct {
+	path    string
+	content string
+	diff    bool
+}
+
+func fileItems(files []string, worktree string) ([]inlineItem, error) {
+	items := make([]inlineItem, 0, len(files))
 	for _, relpath := range files {
-		path := filepath.Join(worktree, filepath.FromSlash(relpath))
-		raw, err := os.ReadFile(path)
+		raw, err := os.ReadFile(filepath.Join(worktree, filepath.FromSlash(relpath)))
 		if err != nil {
-			return Content{}, err
+			return nil, err
 		}
-		manifest := ManifestFile{
-			Path: relpath,
-			Size: int64(len(raw)),
+		items = append(items, inlineItem{path: relpath, content: string(raw)})
+	}
+	return items, nil
+}
+
+func diffItems(ctx context.Context, files []string, baseSHA, worktree string) ([]inlineItem, error) {
+	items := make([]inlineItem, 0, len(files))
+	for _, relpath := range files {
+		raw, err := gitOutput(ctx, worktree, "diff", baseSHA+"..HEAD", "--", relpath)
+		if err != nil {
+			return nil, err
 		}
+		items = append(items, inlineItem{path: relpath, content: string(raw), diff: true})
+	}
+	return items, nil
+}
+
+// budgetedInline applies the per-file and total byte caps uniformly to file
+// content and diffs, recording a "<orig>-><kept> bytes" note for anything
+// truncated and listing every item in the manifest even when the budget is spent.
+func budgetedInline(content Content, items []inlineItem, opts Options) Content {
+	total := 0
+	for _, it := range items {
+		raw := it.content
+		manifest := ManifestFile{Path: it.path, Size: int64(len(raw))}
 		limit := opts.PerFileBytes
 		if limit > len(raw) {
 			limit = len(raw)
@@ -103,33 +143,9 @@ func buildFileInlineContent(content Content, files []string, worktree string, op
 		manifest.Inline = limit > 0
 		content.Files = append(content.Files, manifest)
 		if limit > 0 {
-			content.Inline = append(content.Inline, InlineContent{
-				Path:    relpath,
-				Content: string(raw[:limit]),
-			})
+			content.Inline = append(content.Inline, InlineContent{Path: it.path, Content: raw[:limit], Diff: it.diff})
 			total += limit
 		}
 	}
-	return content, nil
-}
-
-func buildRecentDiffContent(ctx context.Context, content Content, files []string, baseSHA, worktree string) (Content, error) {
-	for _, relpath := range files {
-		raw, err := gitOutput(ctx, worktree, "diff", baseSHA+"..HEAD", "--", relpath)
-		if err != nil {
-			return Content{}, err
-		}
-		diff := string(raw)
-		content.Files = append(content.Files, ManifestFile{
-			Path:   relpath,
-			Size:   int64(len(diff)),
-			Inline: true,
-		})
-		content.Inline = append(content.Inline, InlineContent{
-			Path:    relpath,
-			Content: diff,
-			Diff:    true,
-		})
-	}
-	return content, nil
+	return content
 }

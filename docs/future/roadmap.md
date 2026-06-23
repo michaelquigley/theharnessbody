@@ -8,9 +8,10 @@ The arc:
 2. **Mattermost + command** — a `mattermost.Client` (REST + WebSocket + @mention/trigger command extraction + allowed-users) and a transport-agnostic `command.Registry`, from sexton. *Built*. (otis's message-size truncation deferred per YAGNI until terminus posts large findings.)
 3. **Git (`repo/`)** — path-based mirror + fetch + resolve + ephemeral worktree (from otis, read-only checkout) and a `Repo` working-tree handle for status/stage/commit/pull/push (from sexton). *Built*.
 4. **Scope (`scope/`)** — file selection (full / explicit paths / recent window) and byte-budgeted content assembly with a truncation manifest and diff mode for recent, from otis. *Built*.
-5. **Remaining subsystems** — harvest the collection `terminus` needs: `prompt/` (assembly primitives), `config/`, `record/` (round log + atomic writes, from mercurius), `errs/`, `cli/`.
-6. **terminus** (working name for the "new otis") — the first tool built *on* the body, composed from these parts. Brings its own findings schema (already shaped here) and its body-of-knowledge handling as a tool-side extension.
-7. **Refactor mercurius and sexton** onto the body — last. mercurius is the correctness check throughout (its verdict schema must keep validating unchanged through the body's helper); it is not refactored until the end.
+5. **Prompt (`prompt/`)** — domain-neutral prompt-assembly primitives (safe dynamic fences, fenced content blocks, scope-content rendering, the output-schema block), reconciled from otis and mercurius. *Built*.
+6. **Remaining subsystems** — harvest the collection `terminus` needs: `config/`, `record/` (round log + atomic writes, from mercurius), `errs/`, `cli/`.
+7. **terminus** (working name for the "new otis") — the first tool built *on* the body, composed from these parts. Brings its own findings schema (already shaped here) and its body-of-knowledge handling as a tool-side extension.
+8. **Refactor mercurius and sexton** onto the body — last. mercurius is the correctness check throughout (its verdict schema must keep validating unchanged through the body's helper); it is not refactored until the end.
 
 This deliberately makes terminus the first consumer rather than refactoring mercurius/sexton early as an extraction forcing-function; the donor refactor is deferred to the end.
 

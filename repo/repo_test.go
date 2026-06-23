@@ -210,3 +210,16 @@ exit 0
 		t.Fatalf("git environment = %v, want first line %q", lines, want)
 	}
 }
+
+func TestNew(t *testing.T) {
+	if r, err := New(t.TempDir(), ""); !errors.Is(err, ErrNotARepo) || r != nil {
+		t.Fatalf("New(non-repo) = %v, %v; want nil, ErrNotARepo", r, err)
+	}
+
+	dir := t.TempDir()
+	gitCmd(t, dir, "init", "-b", "main")
+	r, err := New(dir, "")
+	if err != nil || r == nil {
+		t.Fatalf("New(repo) = %v, %v; want a repo, nil", r, err)
+	}
+}

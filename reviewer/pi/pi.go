@@ -47,8 +47,10 @@ func New(options Options) *Reviewer {
 // by the prompt (which already inlines the artifact content, the output schema, and
 // a "single json object only" instruction). pi runs read-only ('--tools
 // read,grep,find,ls'), ephemeral ('--no-session'), and with project context files
-// suppressed ('--no-context-files') so the review is not coloured by the AGENTS.md
-// or CLAUDE.md that sit above the round directory. The final assistant message is
+// suppressed ('--no-context-files') so the reviewed repo's AGENTS.md/CLAUDE.md
+// can't colour or prompt-inject the review — defense in depth, since WorkingDir
+// should be a clean directory anyway (see reviewer.ReviewRequest.WorkingDir). The
+// final assistant message is
 // parsed out of pi's '--mode json' event stream and the json object is extracted
 // from it; the caller validates that object against the schema.
 func (r *Reviewer) Review(ctx context.Context, req reviewer.ReviewRequest) (reviewer.ReviewResponse, error) {

@@ -29,15 +29,12 @@ type Config struct {
 	URL      string
 	Token    string
 	TokenEnv string
-	// ChannelID is optional — a convenient default channel for a caller's own
-	// proactive PostMessage calls. The command path replies to the channel a
-	// command arrived on, not this one.
-	ChannelID string
 	// TriggerWords: a message that starts with one of these (case-insensitive,
 	// on a word boundary) is treated as a command. An @mention of the bot always
 	// triggers, so TriggerWords may be empty for mention-only operation.
 	TriggerWords []string
-	// AllowedUsers: if non-empty, only these usernames may issue commands.
+	// AllowedUsers: if non-empty, only these usernames may issue commands. Empty
+	// means anyone in the channel can — set it for a shared channel.
 	AllowedUsers []string
 }
 
@@ -46,8 +43,20 @@ type Config struct {
 // A command.Registry's Dispatch method satisfies this signature directly.
 type Responder func(ctx context.Context, command string) string
 
+// clientState tracks the one-shot lifecycle. A Client may be Started once and
+// Stopped once; Stop before a successful Start is a no-op and does not consume
+// the lifecycle.
+type clientState int
+
+const (
+	stateIdle clientState = iota
+	stateStarting
+	stateStarted
+	stateStopped
+)
+
 // Client manages a connection to a Mattermost server for posting messages and
-// listening for commands via WebSocket.
+// listening for commands via WebSocket. It is one-shot: Start may be called once.
 type Client struct {
 	cfg         Config
 	token       string
@@ -60,6 +69,8 @@ type Client struct {
 	ws          *websocket.Conn
 	ctx         context.Context
 	cancel      context.CancelFunc
+	lifeMu      sync.Mutex
+	state       clientState
 	stopCh      chan struct{}
 	doneCh      chan struct{}
 }
@@ -87,41 +98,66 @@ func NewClient(cfg Config) *Client {
 // Start authenticates with the Mattermost server, resolves the bot identity,
 // opens a WebSocket connection, and begins listening for commands, routing each
 // to responder. Startup failures (missing token, auth failure) are fatal — no
-// silent degradation.
+// silent degradation. Start may be called once; a second call (or a call after
+// Stop) returns an error. A failed Start leaves the client idle and retryable.
 func (c *Client) Start(responder Responder) error {
+	if responder == nil {
+		return fmt.Errorf("mattermost responder is required")
+	}
 	if c.token == "" {
 		return fmt.Errorf("mattermost token is required (set TokenEnv or Token in config)")
 	}
+
+	c.lifeMu.Lock()
+	if c.state != stateIdle {
+		c.lifeMu.Unlock()
+		return fmt.Errorf("mattermost client cannot be started twice")
+	}
+	c.state = stateStarting
+	c.lifeMu.Unlock()
+
 	c.responder = responder
 
 	// resolve bot identity
 	me, err := c.apiGet("/api/v4/users/me")
 	if err != nil {
+		c.setState(stateIdle)
 		return fmt.Errorf("failed to authenticate with mattermost: %w", err)
 	}
 	c.botUserID, _ = me["id"].(string)
 	c.botUsername, _ = me["username"].(string)
 	if c.botUserID == "" {
+		c.setState(stateIdle)
 		return fmt.Errorf("mattermost /api/v4/users/me did not return a user id")
 	}
 	dl.Infof("mattermost bot identity: @%s (%s)", c.botUsername, c.botUserID)
 
 	// open websocket
 	if err := c.connectWebSocket(); err != nil {
+		c.setState(stateIdle)
 		return fmt.Errorf("failed to connect mattermost websocket: %w", err)
 	}
 
 	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.setState(stateStarted)
 	go c.listen()
 	return nil
 }
 
 // Stop cancels in-flight commands, closes the WebSocket connection, and waits for
-// the listen goroutine to exit.
+// the listen goroutine to exit. It is a no-op unless the client is currently
+// started, so calling it before Start, after a failed Start, or more than once is
+// safe — and a pre-Start Stop does not prevent a later Start/Stop.
 func (c *Client) Stop() {
-	if c.cancel != nil {
-		c.cancel()
+	c.lifeMu.Lock()
+	if c.state != stateStarted {
+		c.lifeMu.Unlock()
+		return
 	}
+	c.state = stateStopped
+	c.lifeMu.Unlock()
+
+	c.cancel()
 	close(c.stopCh)
 	c.mu.Lock()
 	if c.ws != nil {
@@ -129,6 +165,12 @@ func (c *Client) Stop() {
 	}
 	c.mu.Unlock()
 	<-c.doneCh
+}
+
+func (c *Client) setState(s clientState) {
+	c.lifeMu.Lock()
+	c.state = s
+	c.lifeMu.Unlock()
 }
 
 // PostMessage posts a message to the given channel via the REST API.

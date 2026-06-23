@@ -64,11 +64,18 @@ func Resolve(ctx context.Context, worktree string, spec Spec, now time.Time) (Re
 }
 
 func resolvePathScope(ctx context.Context, worktree string, entries []string) ([]string, error) {
+	tracked, err := trackedSet(ctx, worktree)
+	if err != nil {
+		return nil, err
+	}
 	seen := map[string]struct{}{}
 	for _, entry := range entries {
 		entry = filepath.ToSlash(strings.TrimSpace(entry))
 		if entry == "" {
 			continue
+		}
+		if escapesWorktree(entry) {
+			return nil, fmt.Errorf("path %q is outside the worktree", entry)
 		}
 		abs := filepath.Join(worktree, filepath.FromSlash(entry))
 		if info, err := os.Stat(abs); err == nil && info.IsDir() {
@@ -85,23 +92,26 @@ func resolvePathScope(ctx context.Context, worktree string, entries []string) ([
 				return nil, err
 			}
 			for _, match := range matches {
-				info, err := os.Stat(match)
-				if err != nil {
-					return nil, err
-				}
 				rel, err := filepath.Rel(worktree, match)
 				if err != nil {
 					return nil, err
 				}
 				rel = filepath.ToSlash(rel)
+				if rel == ".." || strings.HasPrefix(rel, "../") {
+					continue // a glob that escaped the worktree
+				}
+				info, err := os.Stat(match)
+				if err != nil {
+					return nil, err
+				}
 				if info.IsDir() {
 					files, err := gitListFiles(ctx, worktree, rel)
 					if err != nil {
 						return nil, err
 					}
 					addFiles(seen, files)
-				} else {
-					seen[rel] = struct{}{}
+				} else if _, ok := tracked[rel]; ok {
+					seen[rel] = struct{}{} // only tracked files from a glob
 				}
 			}
 			continue
@@ -114,8 +124,10 @@ func resolvePathScope(ctx context.Context, worktree string, entries []string) ([
 				return nil, err
 			}
 			addFiles(seen, files)
-		} else {
+		} else if _, ok := tracked[entry]; ok {
 			seen[entry] = struct{}{}
+		} else {
+			return nil, fmt.Errorf("%s: not a tracked file", entry)
 		}
 	}
 	files := make([]string, 0, len(seen))
@@ -124,6 +136,31 @@ func resolvePathScope(ctx context.Context, worktree string, entries []string) ([
 	}
 	sort.Strings(files)
 	return files, nil
+}
+
+// escapesWorktree reports whether a path entry would resolve outside the worktree
+// (an absolute path, or one that climbs out via ..). Path scope stays inside
+// tracked repo content; a caller wanting broader access opts in elsewhere.
+func escapesWorktree(entry string) bool {
+	if filepath.IsAbs(entry) {
+		return true
+	}
+	clean := filepath.Clean(entry)
+	return clean == ".." || strings.HasPrefix(clean, "../")
+}
+
+// trackedSet is the set of git-tracked files in the worktree, used to keep path
+// scope from reaching untracked or out-of-tree files.
+func trackedSet(ctx context.Context, worktree string) (map[string]struct{}, error) {
+	files, err := gitListFiles(ctx, worktree)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		set[f] = struct{}{}
+	}
+	return set, nil
 }
 
 func resolveRecentScope(ctx context.Context, worktree string, window time.Duration, now time.Time) ([]string, string, error) {

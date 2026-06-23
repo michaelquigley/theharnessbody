@@ -33,9 +33,21 @@ func New() *Registry {
 }
 
 // Register adds a command, matched case-insensitively. summary is shown in Help.
-// Registering the same name twice replaces the earlier handler.
+// Registering the same name twice replaces the earlier handler. Register panics on
+// misuse — a blank name, the reserved name "help", or a nil handler — since these
+// are setup-time programmer errors that would otherwise yield a command that can
+// never be dispatched or that panics when it is.
 func (r *Registry) Register(name string, summary string, handler Handler) {
-	r.commands[strings.ToLower(strings.TrimSpace(name))] = entry{summary: summary, handler: handler}
+	name = strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case name == "":
+		panic("command: Register called with a blank name")
+	case name == "help":
+		panic(`command: "help" is reserved`)
+	case handler == nil:
+		panic("command: Register called with a nil handler for command " + name)
+	}
+	r.commands[name] = entry{summary: summary, handler: handler}
 }
 
 // Dispatch parses commandText (a command name plus args, already stripped of any

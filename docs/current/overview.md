@@ -2,7 +2,7 @@
 
 A Go library: the reusable substrate that review harnesses are built on. This file describes what exists, verifiable against the code. Forward-looking intent lives in `../future/`.
 
-Today the body carries four subsystems.
+Today the body carries five subsystems.
 
 ## Reviewer subsystem (`reviewer/`)
 
@@ -32,7 +32,7 @@ Chat ingress/egress and a transport-agnostic command dispatcher, lifted and gene
 Thin `git`-CLI wrappers in two shapes, lifted from otis and sexton.
 
 - **Read-only checkout (free functions, from otis)** — `EnsureMirror` (bare `--mirror` clone, origin-verified), `FetchBranch` (explicit refspec so the ref never goes stale), `ResolveBranchSHA`, and `CreateWorktree`/`RemoveWorktree`/`PruneWorktrees`/`CaptureHEAD` for an ephemeral detached checkout. This is how a reviewer gets a branch's code onto disk without touching any working copy. The package is unopinionated about paths — the caller says where mirrors and scratch worktrees live.
-- **Working tree (a `Repo` handle, from sexton)** — `New(dir, sshKey)` then `Status`/`IsDirty`/`Branch`/`HEAD`/`ShortHEAD`/`CommitTime`/`Diff*` and the write ops `StageAll`/`Commit`/`Pull` (`--rebase`)/`Push`/`RebaseAbort`, with sentinel errors (`ErrNothingToCommit`, `ErrConflict`, `ErrNoRemote`, …).
+- **Working tree (a `Repo` handle, from sexton)** — `New(dir, sshKey) (*Repo, error)` then `Status`/`IsDirty`/`Branch`/`HEAD`/`ShortHEAD`/`CommitTime`/`Diff*` and the write ops `StageAll`/`Commit`/`Pull` (`--rebase`)/`Push`/`RebaseAbort`, with sentinel errors (`ErrNothingToCommit`, `ErrConflict`, `ErrNoRemote`, …).
 - Shared: one SSH-command builder (`-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new`, shell-quoted key).
 
 ## Scope (`scope/`)
@@ -41,3 +41,11 @@ Selects which files a review looks at and packs them into a prompt within a byte
 
 - **`Resolve(ctx, worktree, Spec, now)`** picks files three ways: `KindFull` (every tracked file), `KindPaths` (an explicit list of files, directories, or globs), `KindRecent` (files changed within `Spec.Window`, with the diff base commit recorded). Returns `Resolved{Kind, Files, BaseSHA}`.
 - **`BuildContent(ctx, worktree, Resolved, Options)`** reads the selection into a `Content` manifest plus inline blocks, bounded by per-file and total byte caps (default 8 KiB / 256 KiB) with a `<orig>-><kept> bytes` truncation note. Recent scope inlines per-file diffs instead of whole files.
+
+## Prompt (`prompt/`)
+
+The domain-neutral primitives a review prompt is assembled from, reconciled from otis and mercurius. There is deliberately no universal `Build`: domain sections (a body-of-knowledge slice, prior findings, verdict definitions, settled decisions) stay in the tools; the body provides the load-bearing parts and each tool composes its own prompt.
+
+- **`Fence`** / **`FencedBlock`** — a backtick fence guaranteed longer than any run of backticks in the content, so any blob (file, diff, artifact) inlines without breaking out.
+- **`ScopeContent(scope.Content)`** — renders the scope manifest plus inline blocks (content or diff) into prompt text; where `prompt` pairs with `scope`.
+- **`SchemaBlock(json.RawMessage)`** — the "single JSON object only" instruction plus the pretty-printed schema (for example `reviewer/schema`'s) in a json fence.

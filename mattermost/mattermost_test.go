@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func stubResponder(reply string, captured *string) Responder {
@@ -361,5 +362,57 @@ func TestStartAuthFailure(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "authenticate") {
 		t.Errorf("expected auth error, got: %v", err)
+	}
+}
+
+func TestStartNilResponder(t *testing.T) {
+	c := NewClient(Config{URL: "http://localhost", Token: "t"})
+	if err := c.Start(nil); err == nil || !strings.Contains(err.Error(), "responder is required") {
+		t.Fatalf("expected nil-responder error, got %v", err)
+	}
+}
+
+func TestStartRejectsDoubleStart(t *testing.T) {
+	c := NewClient(Config{URL: "http://localhost", Token: "t"})
+	c.lifeMu.Lock()
+	c.state = stateStarted // simulate an already-running client
+	c.lifeMu.Unlock()
+	if err := c.Start(stubResponder("", nil)); err == nil || !strings.Contains(err.Error(), "twice") {
+		t.Fatalf("expected double-start to be rejected, got %v", err)
+	}
+}
+
+func TestStopBeforeStartIsNoop(t *testing.T) {
+	c := NewClient(Config{URL: "http://localhost", Token: "t"})
+	c.Stop() // never started
+	c.Stop() // idempotent
+}
+
+// Regression: a pre-start Stop must not consume the lifecycle and leave a later
+// successfully-started client unstoppable.
+func TestStopBeforeStartThenRealStop(t *testing.T) {
+	c := NewClient(Config{URL: "http://localhost", Token: "t"})
+	c.Stop() // pre-start: a no-op that must NOT consume the lifecycle
+
+	// stand in for the state a successful Start leaves behind, plus a fake listener
+	c.ctx, c.cancel = context.WithCancel(context.Background())
+	c.lifeMu.Lock()
+	c.state = stateStarted
+	c.lifeMu.Unlock()
+	go func() { <-c.stopCh; close(c.doneCh) }()
+
+	done := make(chan struct{})
+	go func() {
+		c.Stop() // must actually stop
+		c.Stop() // and remain idempotent afterward
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Stop after a real start blocked — pre-start Stop consumed the lifecycle")
+	}
+	if c.ctx.Err() == nil {
+		t.Fatal("Stop did not cancel the context")
 	}
 }
