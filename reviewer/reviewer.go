@@ -24,12 +24,14 @@ type ReviewRequest struct {
 	// Schema is the output schema passed to the backend. The caller validates the
 	// response against this same schema.
 	Schema json.RawMessage
-	// WorkingDir is the directory the backend process runs in. It should be a
-	// neutral, caller-controlled directory — NOT the untrusted checkout under
-	// review. Some backends (codex, claude) auto-load a directory's AGENTS.md /
-	// CLAUDE.md as instructions, so running inside the reviewed code would let it
-	// prompt-inject the reviewer. Deliver the code to review through Prompt (see
-	// the prompt and scope packages), not through WorkingDir.
+	// WorkingDir is the directory the backend process runs in. Most design-review
+	// callers use a neutral scratch directory and deliver artifacts through
+	// Prompt. Code-review callers may deliberately run in the checkout under
+	// review so the backend can read connected source files directly; those
+	// callers must use read-only backend modes and account for backend-specific
+	// context-file loading. pi suppresses project context files; codex/claude
+	// require prompt-level precedence instructions until their adapters grow a
+	// review-specific suppression path.
 	WorkingDir string
 }
 

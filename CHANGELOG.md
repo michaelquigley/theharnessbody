@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+FEATURE: Record (`record/`) subsystem — a domain-neutral durable review-record writer generalized from mercurius's round log. `WriteInitial` renders frontmatter, artifact manifest, reviewer raw JSON, and optional caller-rendered markdown sections through an atomic temp-file + rename write; `WriteNotes` and `WriteSynopsis` provide the mercurius-shaped follow-on surfaces without importing mercurius schema types. Terminus uses the section hook for selected qualities and classified findings.
+
+CHANGE: The reviewer `WorkingDir` contract now allows supervised code-review callers to run a backend read-only in the actual checkout under review, while keeping the neutral-directory pattern as the default for design-review callers. This is driven by terminus; pi already suppresses project context files, and codex/claude rely on prompt precedence until a backend-specific suppression path is added.
+
 FEATURE: Prompt (`prompt/`) subsystem — the domain-neutral primitives a review prompt is assembled from, reconciled from otis and mercurius: `Fence`/`FencedBlock` (a backtick fence guaranteed longer than any run of backticks in the content, so any blob inlines safely), `ScopeContent` (renders a `scope.Content` manifest plus inline/diff blocks), and `SchemaBlock` (the single-JSON-object instruction plus the pretty-printed schema). Deliberately no universal `Build` — domain sections (BoK, prior findings, verdict definitions, settled decisions) stay tool-side.
 
 FEATURE: Scope (`scope/`) subsystem — `Resolve` selects a review's files three ways (`KindFull` all tracked, `KindPaths` an explicit list of files/dirs/globs, `KindRecent` files changed within a `time.Duration` window, with the diff base recorded), and `BuildContent` packs the selection into a manifest-plus-inline `Content` bounded by per-file and total byte caps (default 8 KiB / 256 KiB) with a `<orig>-><kept> bytes` truncation note, inlining per-file diffs for recent scope. Lifted from otis with its config/duration coupling replaced by plain inputs.
