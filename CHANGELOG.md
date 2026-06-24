@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.1.0
+
 FEATURE: Record (`record/`) subsystem — a domain-neutral durable review-record writer generalized from mercurius's round log. `WriteInitial` renders frontmatter, artifact manifest, reviewer raw JSON, and optional caller-rendered markdown sections through an atomic temp-file + rename write; `WriteNotes` and `WriteSynopsis` provide the mercurius-shaped follow-on surfaces without importing mercurius schema types. Terminus uses the section hook for selected qualities and classified findings.
 
 CHANGE: The reviewer `WorkingDir` contract now allows supervised code-review callers to run a backend read-only in the actual checkout under review, while keeping the neutral-directory pattern as the default for design-review callers. This is driven by terminus; pi already suppresses project context files, and codex/claude rely on prompt precedence until a backend-specific suppression path is added.
