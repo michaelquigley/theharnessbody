@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+CHANGE: The pi reviewer now hermetically seals review runs off from the host's development-flavoured pi configuration. Extension discovery (`--no-extensions` — extensions are how MCP servers arrive in pi), skills (`--no-skills`), and prompt templates (`--no-prompt-templates`) are disabled; the working directory is forced untrusted for the run (`--no-approve`), so a repo trusted in pi's trust store for interactive development can't execute its project `.pi/` extensions inside a review; and startup network operations are disabled (`--offline` — version check, managed binary and package installs, model catalog refresh; the model API call and oauth token refresh are unaffected). Flag set and `--mode json` event shape re-verified live against pi v0.80.7.
+
 ## v0.1.0
 
 FEATURE: Record (`record/`) subsystem — a domain-neutral durable review-record writer generalized from mercurius's round log. `WriteInitial` renders frontmatter, artifact manifest, reviewer raw JSON, and optional caller-rendered markdown sections through an atomic temp-file + rename write; `WriteNotes` and `WriteSynopsis` provide the mercurius-shaped follow-on surfaces without importing mercurius schema types. Terminus uses the section hook for selected qualities and classified findings.
