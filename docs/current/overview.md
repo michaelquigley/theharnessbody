@@ -22,7 +22,7 @@ The reviewer-output contract — the codex envelope, the findings shape, and the
 Chat ingress/egress and a transport-agnostic command dispatcher, lifted and generalized from sexton.
 
 - **`command`** — a `Registry` of named commands (`Register(name, summary, Handler)`), with `Dispatch(ctx, text) string` (help on empty/`help`, the handler's reply or a rendered error, or an unknown-command message) and `Help()`. Transport-agnostic: the same registry serves a chat bot and a CLI.
-- **`mattermost`** — a `Client` that posts via REST (`PostMessage`) and listens over WebSocket (with reconnect), resolving the bot identity, extracting commands from @mentions or configured trigger words, and filtering by allowed users. On a matched message it calls a `Responder func(ctx, command) string` and posts a non-empty reply to the originating channel. `Registry.Dispatch` satisfies `Responder`, so wiring is one line: `mc.Start(reg.Dispatch)`.
+- **`mattermost`** — a `Client` that posts via REST (`PostMessage`) and listens over WebSocket (with reconnect), resolving the bot identity, extracting commands from @mentions or configured trigger words (and treating any message in a direct-message channel as a command as written), and filtering by allowed users. On a matched message it calls a `Responder func(ctx, command) string` and posts a non-empty reply to the originating channel. `Registry.Dispatch` satisfies `Responder`, so wiring is one line: `mc.Start(reg.Dispatch)`.
 - **`mattermost` (integration)** — build-tagged live smoke tests (`TestConfirmPostMessage`, `TestConfirmConnect`), gated on `THB_MM_*` env.
 
 `mattermost` doesn't import `command` and vice versa; the app wires them.

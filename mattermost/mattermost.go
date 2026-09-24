@@ -31,7 +31,8 @@ type Config struct {
 	TokenEnv string
 	// TriggerWords: a message that starts with one of these (case-insensitive,
 	// on a word boundary) is treated as a command. An @mention of the bot always
-	// triggers, so TriggerWords may be empty for mention-only operation.
+	// triggers, and so does any message in a direct-message channel with the bot,
+	// so TriggerWords may be empty for mention-and-DM-only operation.
 	TriggerWords []string
 	// AllowedUsers: if non-empty, only these usernames may issue commands. Empty
 	// means anyone in the channel can — set it for a shared channel.
@@ -338,9 +339,13 @@ type wsEvent struct {
 }
 
 type postedData struct {
-	Post     string `json:"post"`
-	Mentions string `json:"mentions"`
+	Post        string `json:"post"`
+	Mentions    string `json:"mentions"`
+	ChannelType string `json:"channel_type"` // "D" for a direct-message channel
 }
+
+// directChannel is the channel_type Mattermost reports for a direct-message channel
+const directChannel = "D"
 
 type post struct {
 	UserID    string `json:"user_id"`
@@ -384,8 +389,12 @@ func (c *Client) handleMessage(raw []byte) {
 		}
 	}
 
-	// determine command text via mention or trigger word path
+	// determine command text via mention or trigger word path; in a direct-message
+	// channel the whole message is the command, since a DM addresses the bot already
 	commandText, matched := c.extractCommand(p.Message, data.Mentions)
+	if !matched && data.ChannelType == directChannel {
+		commandText, matched = strings.TrimSpace(p.Message), true
+	}
 	if !matched {
 		return
 	}

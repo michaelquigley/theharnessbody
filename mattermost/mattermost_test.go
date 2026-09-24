@@ -20,8 +20,12 @@ func stubResponder(reply string, captured *string) Responder {
 }
 
 func postedEvent(userID, channelID, message string) []byte {
+	return postedEventIn(userID, channelID, "O", message)
+}
+
+func postedEventIn(userID, channelID, channelType, message string) []byte {
 	postJSON, _ := json.Marshal(map[string]string{"user_id": userID, "channel_id": channelID, "message": message})
-	dataJSON, _ := json.Marshal(map[string]string{"post": string(postJSON)})
+	dataJSON, _ := json.Marshal(map[string]string{"post": string(postJSON), "channel_type": channelType})
 	eventJSON, _ := json.Marshal(map[string]any{"event": "posted", "data": json.RawMessage(dataJSON)})
 	return eventJSON
 }
@@ -414,5 +418,31 @@ func TestStopBeforeStartThenRealStop(t *testing.T) {
 	}
 	if c.ctx.Err() == nil {
 		t.Fatal("Stop did not cancel the context")
+	}
+}
+
+// a message in a direct-message channel is a command as written, with no trigger word or @mention needed;
+// the same message in an open channel is ignored
+func TestDirectMessageIsACommand(t *testing.T) {
+	var captured string
+	c := &Client{
+		cfg:       Config{},
+		botUserID: "bot123",
+		responder: stubResponder("", &captured),
+		userCache: make(map[string]string),
+	}
+	c.handleMessage(postedEventIn("user1", "dm", "D", "  status  "))
+	if captured != "status" {
+		t.Errorf("expected the DM routed as 'status', got %q", captured)
+	}
+	captured = ""
+	c.handleMessage(postedEventIn("user1", "chan", "O", "status"))
+	if captured != "" {
+		t.Errorf("a bare message in an open channel must not dispatch, got %q", captured)
+	}
+	// the bot's own DM replies are still suppressed
+	c.handleMessage(postedEventIn("bot123", "dm", "D", "available commands:"))
+	if captured != "" {
+		t.Errorf("the bot's own message must be ignored in a DM too, got %q", captured)
 	}
 }
